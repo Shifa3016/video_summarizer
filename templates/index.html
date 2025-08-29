@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Video AI Tools</title>
+    <style>
+        body { font-family: Arial; text-align: center; margin: 30px; }
+        input { padding: 8px; width: 400px; font-size: 16px; }
+        button { padding: 10px 20px; margin: 10px; font-size: 16px; cursor: pointer; }
+        #videoPlayer { margin-top: 20px; }
+        iframe { width: 800px; height: 450px; margin-top: 20px; }
+        #notes { margin-top: 30px; text-align: left; max-width: 800px; margin-left: auto; margin-right: auto; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <h1>Video AI Tools</h1>
+
+    <!-- URL input -->
+    <div>
+        <input type="text" id="videoUrl" placeholder="Enter YouTube URL">
+        <button onclick="loadVideo()">Submit</button>
+    </div>
+
+    <!-- Buttons -->
+    <div>
+        <button onclick="getNotes()">Detailed Notes</button>
+        <button onclick="navigate('chatbot')">Chatbot</button>
+        <button onclick="navigate('quiz')">Quiz</button>
+        <button onclick="navigate('flashcards')">Flashcards</button>
+    </div>
+
+    <!-- Video -->
+    <div id="videoPlayer"></div>
+
+    <!-- Notes -->
+    <div id="notes"></div>
+
+    <script>
+        let currentVideoId = "";
+
+        function getVideoId(url) {
+            try {
+                const parsed = new URL(url);
+                if (parsed.hostname.includes('youtu.be')) return parsed.pathname.slice(1);
+                return parsed.searchParams.get("v");
+            } catch {
+                return url; // fallback
+            }
+        }
+
+        function navigate(feature) {
+            if(!currentVideoId){
+                alert("Please submit a video first!");
+                return;
+            }
+            window.location.href = `/${feature}?video_id=${currentVideoId}`;
+        }
+
+        function loadVideo() {
+            const url = document.getElementById("videoUrl").value;
+            if(!url) { alert("Enter a YouTube URL"); return; }
+
+            currentVideoId = getVideoId(url);
+            document.getElementById("videoPlayer").innerHTML = `
+                <iframe src="https://www.youtube.com/embed/${currentVideoId}" frameborder="0" allowfullscreen></iframe>
+            `;
+
+            // Clear previous notes
+            document.getElementById("notes").innerHTML = "";
+        }
+
+        async function getNotes() {
+            const url = document.getElementById('videoUrl').value;
+            const output = document.getElementById('notes');
+
+            if(!url) { alert("Enter a YouTube URL"); return; }
+
+            output.innerHTML = "Processing... Please wait.";
+
+            try {
+                const response = await fetch("/get_notes", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ video_url: url })
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    output.innerHTML = data.notes;
+                } else {
+                    output.innerHTML = "<span class='error'>" + (data.error || "Unknown error") + "</span>";
+                }
+            } catch (err) {
+                output.innerHTML = "<span class='error'>Request failed: " + err + "</span>";
+            }
+        }
+    </script>
+</body>
+</html>
