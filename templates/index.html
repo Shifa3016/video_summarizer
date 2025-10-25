@@ -1,18 +1,74 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <title>Video AI Tools</title>
     <style>
-        body { font-family: Arial; text-align: center; margin: 30px; }
-        input { padding: 8px; width: 400px; font-size: 16px; }
-        button { padding: 10px 20px; margin: 10px; font-size: 16px; cursor: pointer; }
-        #videoPlayer { margin-top: 20px; }
-        iframe { width: 800px; height: 450px; margin-top: 20px; }
-        #notes { margin-top: 30px; text-align: left; max-width: 800px; margin-left: auto; margin-right: auto; }
-        .error { color: red; }
+        body {
+            font-family: Arial;
+            text-align: center;
+            margin: 30px;
+        }
+
+        input {
+            padding: 8px;
+            width: 400px;
+            font-size: 16px;
+        }
+
+        button {
+            padding: 10px 20px;
+            margin: 10px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        #videoPlayer {
+            margin-top: 20px;
+        }
+
+        iframe {
+            width: 800px;
+            height: 450px;
+            margin-top: 20px;
+        }
+
+        #notes {
+            margin-top: 30px;
+            text-align: left;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+            position: relative;
+            border: 1px solid #ccc;
+            padding: 15px;
+            border-radius: 6px;
+        }
+
+        .error {
+            color: red;
+        }
+
+        #copyBtn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background: #007bff;
+            color: white;
+            font-size: 14px;
+        }
+
+        #copyBtn:hover {
+            background: #0056b3;
+        }
     </style>
 </head>
+
 <body>
     <h1>Video AI Tools</h1>
 
@@ -25,16 +81,34 @@
     <!-- Buttons -->
     <div>
         <button onclick="getNotes()">Detailed Notes</button>
-        <button onclick="navigate('chatbot')">Chatbot</button>
-        <button onclick="navigate('quiz')">Quiz</button>
-        <button onclick="navigate('flashcards')">Flashcards</button>
+        <button onclick="navigate('quiz')">Quiz & Flashcards</button>
+        <button onclick="getTopics()">Generate Topics</button>
+
     </div>
 
     <!-- Video -->
     <div id="videoPlayer"></div>
+    <div id="topics"></div>
 
-    <!-- Notes -->
-    <div id="notes"></div>
+
+    <!-- Topics container -->
+    <div id="topicsContainer"
+        style="display:none; max-width: 800px; margin: 20px auto; border: 1px solid #ccc; border-radius: 6px; padding: 10px; overflow-y: auto; max-height: 300px;">
+        <h3>Video Topics</h3>
+        <ul id="topicsList" style="list-style: none; padding-left: 0;"></ul>
+    </div>
+
+    <!-- Notes container -->
+    <div id="notes"
+        style="display:none; max-width:800px; margin:30px auto; border:1px solid #ccc; padding:15px; border-radius:6px; position:relative;">
+        <button id="copyBtn" onclick="copyNotes()">Copy Notes</button>
+        <button id="togglePlayBtn">▶ Play</button>
+        <button id="restartBtn">🔄 Restart</button>
+
+        <div id="notesContent"></div>
+    </div>
+
+
 
     <script>
         let currentVideoId = "";
@@ -50,7 +124,7 @@
         }
 
         function navigate(feature) {
-            if(!currentVideoId){
+            if (!currentVideoId) {
                 alert("Please submit a video first!");
                 return;
             }
@@ -59,24 +133,71 @@
 
         function loadVideo() {
             const url = document.getElementById("videoUrl").value;
-            if(!url) { alert("Enter a YouTube URL"); return; }
+            if (!url) { alert("Enter a YouTube URL"); return; }
 
             currentVideoId = getVideoId(url);
             document.getElementById("videoPlayer").innerHTML = `
-                <iframe src="https://www.youtube.com/embed/${currentVideoId}" frameborder="0" allowfullscreen></iframe>
-            `;
+    <iframe src="https://www.youtube.com/embed/${currentVideoId}?enablejsapi=1" frameborder="0" allowfullscreen></iframe>
+`;
+
 
             // Clear previous notes
-            document.getElementById("notes").innerHTML = "";
+            document.getElementById("notes").style.display = "none";
+            document.getElementById("notesContent").innerHTML = "";
         }
+
+        // Generate Topics
+        async function getTopics() {
+            const url = document.getElementById('videoUrl').value;
+            if (!url) { alert("Enter a YouTube URL"); return; }
+
+            const topicsDiv = document.getElementById("topics");
+            topicsDiv.innerHTML = "Processing... Please wait.";
+
+            try {
+                const response = await fetch("/get_topics", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ video_url: url })
+                });
+                const data = await response.json();
+                if (data.topics && data.topics.length > 0) {
+                    topicsDiv.innerHTML = data.topics.map(t => `
+                <div style="margin:10px 0;">
+                    <strong>${t.topic}</strong>
+                    <button onclick="playAt('${t.start_time}')">▶ Play</button>
+                </div>
+            `).join("");
+                } else {
+                    topicsDiv.innerHTML = "No topics found.";
+                }
+            } catch (err) {
+                topicsDiv.innerHTML = "Error fetching topics: " + err;
+            }
+        }
+
+        function playAt(seconds) {
+            const iframe = document.querySelector("#videoPlayer iframe");
+            if (iframe) {
+                iframe.contentWindow.postMessage(JSON.stringify({
+                    event: "command",
+                    func: "seekTo",
+                    args: [seconds, true]
+                }), "*");
+            }
+        }
+
+
 
         async function getNotes() {
             const url = document.getElementById('videoUrl').value;
-            const output = document.getElementById('notes');
+            const notesDiv = document.getElementById('notesContent');
+            const notesContainer = document.getElementById('notes');
 
-            if(!url) { alert("Enter a YouTube URL"); return; }
+            if (!url) { alert("Enter a YouTube URL"); return; }
 
-            output.innerHTML = "Processing... Please wait.";
+            notesDiv.innerHTML = "Processing... Please wait.";
+            notesContainer.style.display = "block";
 
             try {
                 const response = await fetch("/get_notes", {
@@ -86,14 +207,150 @@
                 });
                 const data = await response.json();
                 if (response.ok) {
-                    output.innerHTML = data.notes;
+                    notesDiv.innerHTML = data.notes;
                 } else {
-                    output.innerHTML = "<span class='error'>" + (data.error || "Unknown error") + "</span>";
+                    notesDiv.innerHTML = "<span class='error'>" + (data.error || "Unknown error") + "</span>";
                 }
             } catch (err) {
-                output.innerHTML = "<span class='error'>Request failed: " + err + "</span>";
+                notesDiv.innerHTML = "<span class='error'>Request failed: " + err + "</span>";
             }
         }
+
+        function copyNotes() {
+            const notesText = document.getElementById("notesContent").innerText;
+            navigator.clipboard.writeText(notesText).then(() => {
+                alert("Notes copied to clipboard!");
+            }).catch(err => {
+                alert("Failed to copy: " + err);
+            });
+        }
+
+        function readNotes() {
+            const notes = document.getElementById("notesContent").innerText;
+            if (!notes) return alert("No notes to read!");
+
+            const audio = new Audio(`/tts?text=${encodeURIComponent(notes)}`);
+            audio.play().catch(err => console.error("Audio play error:", err));
+        }
+
+        let ttsAudio = null;
+        let isPlaying = false;
+
+        async function loadAudio() {
+            const notes = document.getElementById("notesContent").innerText;
+            if (!notes) return alert("No notes to read!");
+
+            if (ttsAudio) {
+                ttsAudio.pause();
+                ttsAudio = null;
+                isPlaying = false;
+            }
+
+            ttsAudio = new Audio(`/tts?text=${encodeURIComponent(notes)}`);
+            await ttsAudio.load();
+
+            // Update button when audio ends
+            ttsAudio.onended = () => {
+                isPlaying = false;
+                document.getElementById("togglePlayBtn").innerText = "▶ Play";
+            };
+        }
+
+        // Toggle Play/Pause button
+        document.getElementById("togglePlayBtn").onclick = async () => {
+            if (!ttsAudio) await loadAudio();
+
+            if (ttsAudio.paused) {
+                ttsAudio.play().catch(err => console.error(err));
+                isPlaying = true;
+                document.getElementById("togglePlayBtn").innerText = "⏸ Pause";
+            } else {
+                ttsAudio.pause();
+                isPlaying = false;
+                document.getElementById("togglePlayBtn").innerText = "▶ Play";
+            }
+        };
+
+        // Restart button
+        document.getElementById("restartBtn").onclick = async () => {
+            if (!ttsAudio) await loadAudio();
+            ttsAudio.currentTime = 0;
+            ttsAudio.play();
+            isPlaying = true;
+            document.getElementById("togglePlayBtn").innerText = "⏸ Pause";
+        };
+
+
+
+        // Convert seconds to mm:ss format
+        // Convert seconds to hh:mm:ss or mm:ss
+        function formatTime(seconds) {
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = Math.floor(seconds % 60);
+
+            const mm = m < 10 ? '0' + m : m;
+            const ss = s < 10 ? '0' + s : s;
+
+            if (h > 0) {
+                const hh = h < 10 ? '0' + h : h;
+                return `${hh}:${mm}:${ss}`;
+            } else {
+                return `${mm}:${ss}`;
+            }
+        }
+
+
+        async function getTopics() {
+            const url = document.getElementById('videoUrl').value;
+            if (!url) { alert("Enter a YouTube URL"); return; }
+
+            const container = document.getElementById("topicsContainer");
+            const list = document.getElementById("topicsList");
+            container.style.display = "block";
+            list.innerHTML = "<li>Loading topics...</li>";
+
+            try {
+                const response = await fetch("/get_topics", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ video_url: url })
+                });
+                const data = await response.json();
+
+                list.innerHTML = ""; // clear previous
+
+                if (data.topics && data.topics.length > 0) {
+                    data.topics.forEach((t, i) => {
+                        const li = document.createElement("li");
+                        li.style.display = "flex";
+                        li.style.alignItems = "center";
+                        li.style.marginBottom = "5px";
+
+                        const playIcon = document.createElement("span");
+                        playIcon.innerHTML = "&#9654;"; // small play icon ►
+                        playIcon.style.cursor = "pointer";
+                        playIcon.style.marginRight = "8px";
+                        playIcon.style.color = "#007bff";
+                        playIcon.onclick = () => playAt(t.start_time);
+
+                        const topicText = document.createElement("span");
+                        topicText.innerText = `${t.topic} (${formatTime(t.start_time)})`;
+
+                        li.appendChild(playIcon);
+                        li.appendChild(topicText);
+                        list.appendChild(li);
+                    });
+                } else {
+                    list.innerHTML = "<li>No topics found.</li>";
+                }
+            } catch (err) {
+                list.innerHTML = "<li>Error fetching topics: " + err + "</li>";
+            }
+        }
+
+
     </script>
 </body>
+
 </html>
